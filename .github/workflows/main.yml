@@ -1,0 +1,61 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. نزل الكود
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Java 17
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      # 3. Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: stable
+          cache: true
+
+      # 4. اكتب local.properties عشان Gradle يعرف مكان Flutter SDK
+      - name: Write local.properties
+        run: |
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT"  >> android/local.properties
+
+      # 5. نزل الفونت القرآني
+      - name: Download Hafs Font
+        run: |
+          mkdir -p assets/fonts
+          curl -L -o assets/fonts/hafs.ttf \
+            "https://github.com/khaledhosny/amiri/raw/main/fonts/ttf/Amiri-Regular.ttf" \
+            || echo "Font download failed, using fallback"
+          ls -lh assets/fonts/
+
+      # 6. get packages
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # 7. ابني الـ APK
+      - name: Build APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      # 8. ارفع الـ APK كـ artifact (v4 مش v3)
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: quran-app-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
