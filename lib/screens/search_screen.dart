@@ -1,3 +1,4 @@
+import '../data/settings_provider.dart';
 import 'package:flutter/material.dart';
 import '../widgets/app_colors.dart';
 import '../data/quran_data.dart';
@@ -186,7 +187,7 @@ class _ResultCard extends StatelessWidget {
       onTap: () {
         if (result.type == _ResultType.surah && result.surah != null) {
           Navigator.push(context, MaterialPageRoute(
-            builder: (_) => SurahReaderScreen(surah: result.surah!),
+            builder: (_) => SurahReaderScreen(surah: result.surah!, settings: SettingsProvider()),
           ));
         }
       },

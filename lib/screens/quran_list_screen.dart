@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../widgets/app_colors.dart';
 import '../data/quran_data.dart';
 import '../data/quran_service.dart';
+import '../data/settings_provider.dart';
 import 'surah_reader_screen.dart';
+import 'settings_screen.dart';
 
 class QuranListScreen extends StatefulWidget {
-  const QuranListScreen({super.key});
+  final SettingsProvider settings;
+  const QuranListScreen({super.key, required this.settings});
   @override
   State<QuranListScreen> createState() => _QuranListScreenState();
 }
@@ -28,18 +31,19 @@ class _QuranListScreenState extends State<QuranListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = widget.settings.darkMode;
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: dark ? const Color(0xFF1A1A2E) : AppColors.bg,
       body: Column(
         children: [
-          _buildHeader(),
-          Expanded(child: _buildList()),
+          _buildHeader(dark),
+          Expanded(child: _buildList(dark)),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool dark) {
     return Container(
       decoration: const BoxDecoration(gradient: AppColors.gradient),
       child: SafeArea(
@@ -58,8 +62,18 @@ class _QuranListScreenState extends State<QuranListScreen> {
                   const Text('القرآن الكريم',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
                   const Spacer(),
-                  Text('١١٤ سورة',
-                    style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12, fontFamily: 'Tajawal')),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                    child: Container(
+                      width: 34, height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Icon(Icons.settings_rounded, color: Colors.white, size: 18),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -96,19 +110,25 @@ class _QuranListScreenState extends State<QuranListScreen> {
     );
   }
 
-  Widget _buildList() {
+  Widget _buildList(bool dark) {
     final list = _filtered;
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       itemCount: list.length,
-      itemBuilder: (ctx, i) => _SurahCard(surah: list[i]),
+      itemBuilder: (ctx, i) => _SurahCard(
+        surah: list[i],
+        settings: widget.settings,
+        dark: dark,
+      ),
     );
   }
 }
 
 class _SurahCard extends StatefulWidget {
   final dynamic surah;
-  const _SurahCard({required this.surah});
+  final SettingsProvider settings;
+  final bool dark;
+  const _SurahCard({required this.surah, required this.settings, required this.dark});
   @override
   State<_SurahCard> createState() => _SurahCardState();
 }
@@ -127,16 +147,18 @@ class _SurahCardState extends State<_SurahCard> {
   @override
   Widget build(BuildContext context) {
     final s = widget.surah;
+    final cardColor = widget.dark ? const Color(0xFF16213E) : AppColors.card;
+    final textColor = widget.dark ? Colors.white : AppColors.txt;
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => SurahReaderScreen(surah: s),
+        builder: (_) => SurahReaderScreen(surah: s, settings: widget.settings),
       )).then((_) => QuranService.isCached(s.number).then((v) {
         if (mounted) setState(() => _cached = v);
       })),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: cardColor,
           borderRadius: BorderRadius.circular(14),
           boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.07), blurRadius: 8, offset: const Offset(0,2))],
         ),
@@ -144,7 +166,6 @@ class _SurahCardState extends State<_SurahCard> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
-              // Surah number badge
               Container(
                 width: 42, height: 42,
                 decoration: const BoxDecoration(gradient: AppColors.gradient, shape: BoxShape.circle),
@@ -159,15 +180,10 @@ class _SurahCardState extends State<_SurahCard> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(s.nameAr,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.txt, fontFamily: 'Tajawal')),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor, fontFamily: 'Tajawal')),
                     const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text('${s.type} • ${_toArabicNum(s.ayahCount)} آية',
-                          style: const TextStyle(fontSize: 11, color: AppColors.muted, fontFamily: 'Tajawal')),
-                      ],
-                    ),
+                    Text('${s.type} • ${_toArabicNum(s.ayahCount)} آية',
+                      style: const TextStyle(fontSize: 11, color: AppColors.muted, fontFamily: 'Tajawal')),
                   ],
                 ),
               ),
