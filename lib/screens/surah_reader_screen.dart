@@ -41,7 +41,7 @@ const List<String> _endMarks = [
 
 String _getEndMark(int n) => n < _endMarks.length ? _endMarks[n] : '۝$n';
 
-const int _ayahsPerPage = 12;
+const int _ayahsPerPage = 15;
 
 class SurahReaderScreen extends StatefulWidget {
   final Surah surah;
@@ -274,7 +274,7 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
           final nextPageIndex = pageIndex - _currentSurahPages;
           final start = nextPageIndex * _ayahsPerPage;
           final end = (start + _ayahsPerPage).clamp(0, _nextAyahs!.length);
-          final nextSurah = kSurahs[_currentSurah.number]; // السورة التالية
+          final nextSurah = _currentSurah.number < kSurahs.length ? kSurahs[_currentSurah.number] : _currentSurah;
           return _buildPage(_nextAyahs!.sublist(start, end), nextPageIndex, nextSurah, bgColor, dark);
         }
       },
@@ -296,7 +296,7 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
             // إطار المصحف
             Expanded(
               child: Container(
-                margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                margin: const EdgeInsets.fromLTRB(8, 4, 8, 2),
                 decoration: BoxDecoration(
                   color: dark ? const Color(0xFF1E1E2E) : const Color(0xFFFFFDF7),
                   border: Border.all(color: borderColor, width: 1),
@@ -319,7 +319,7 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
                     // نص القرآن
                     Expanded(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                         child: RichText(
                           textAlign: TextAlign.justify,
                           textDirection: TextDirection.rtl,
@@ -331,12 +331,12 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
                                   fontFamily: 'Hafs',
                                   fontSize: fontSize,
                                   color: textColor,
-                                  height: 2.6,
+                                  height: 2.0,
                                 ),
                               ),
                               WidgetSpan(
                                 child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                                  // no margin
                                   child: Text(
                                     ' \u06DD${_toArabicNum(a.numberInSurah)} ',
                                     style: TextStyle(
