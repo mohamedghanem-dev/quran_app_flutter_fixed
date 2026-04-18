@@ -3,9 +3,10 @@ import 'package:flutter/services.dart';
 import '../widgets/app_colors.dart';
 import '../models/surah_model.dart';
 import '../data/quran_service.dart';
+import '../data/quran_data.dart';
 import '../data/settings_provider.dart';
-import 'quran_list_screen.dart';
 
+// علامات نهاية الآيات
 const List<String> _endMarks = [
   '','۝١','۝٢','۝٣','۝٤','۝٥','۝٦','۝٧','۝٨','۝٩','۝١٠',
   '۝١١','۝١٢','۝١٣','۝١٤','۝١٥','۝١٦','۝١٧','۝١٨','۝١٩','۝٢٠',
@@ -40,7 +41,7 @@ const List<String> _endMarks = [
 
 String _getEndMark(int n) => n < _endMarks.length ? _endMarks[n] : '۝$n';
 
-const int _ayahsPerPage = 10;
+const int _ayahsPerPage = 12;
 
 class SurahReaderScreen extends StatefulWidget {
   final Surah surah;
@@ -58,17 +59,22 @@ class SurahReaderScreen extends StatefulWidget {
 }
 
 class _SurahReaderScreenState extends State<SurahReaderScreen> {
+  // بيانات السورة الحالية
   List<Ayah>? _ayahs;
+  // بيانات السورة التالية (للتكملة)
+  List<Ayah>? _nextAyahs;
   String? _error;
   bool _loading = true;
   late PageController _pageCtrl;
   int _currentPage = 0;
-  bool _showBars = false; // شريط يظهر عند الضغط
+  bool _showBars = false;
   bool _bookmarked = false;
+  late Surah _currentSurah;
 
   @override
   void initState() {
     super.initState();
+    _currentSurah = widget.surah;
     _pageCtrl = PageController();
     _loadAyahs();
     _checkBookmark();
@@ -77,10 +83,7 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   void _checkBookmark() {
     final s = widget.settings;
     if (s.bookmarkSurah == widget.surah.number) {
-      setState(() {
-        _bookmarked = true;
-        _currentPage = s.bookmarkPage;
-      });
+      setState(() => _bookmarked = true);
     }
   }
 
@@ -88,26 +91,52 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     try {
       final ayahs = await QuranService.getSurahAyahs(widget.surah.number);
       if (!mounted) return;
+
+      // حمّل السورة التالية لو موجودة
+      List<Ayah>? nextAyahs;
+      if (widget.surah.number < 114) {
+        try {
+          nextAyahs = await QuranService.getSurahAyahs(widget.surah.number + 1);
+        } catch (_) {}
+      }
+
       int startPage = 0;
       if (widget.jumpToAyah != null) {
         startPage = ((widget.jumpToAyah! - 1) ~/ _ayahsPerPage);
       } else if (widget.settings.bookmarkSurah == widget.surah.number) {
         startPage = widget.settings.bookmarkPage;
       }
-      setState(() { _ayahs = ayahs; _loading = false; });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && startPage > 0) {
-          _pageCtrl.jumpToPage(startPage);
-          setState(() => _currentPage = startPage);
-        }
+
+      setState(() {
+        _ayahs = ayahs;
+        _nextAyahs = nextAyahs;
+        _loading = false;
       });
+
+      if (startPage > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _pageCtrl.jumpToPage(startPage);
+            setState(() => _currentPage = startPage);
+          }
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = 'تعذّر تحميل السورة\nتأكد من الاتصال بالإنترنت'; _loading = false; });
     }
   }
 
+  // إجمالي الصفحات (السورة الحالية + التالية)
   int get _totalPages {
+    if (_ayahs == null) return 1;
+    final currentPages = ((_ayahs!.length - 1) ~/ _ayahsPerPage) + 1;
+    if (_nextAyahs == null) return currentPages;
+    final nextPages = ((_nextAyahs!.length - 1) ~/ _ayahsPerPage) + 1;
+    return currentPages + nextPages;
+  }
+
+  int get _currentSurahPages {
     if (_ayahs == null) return 1;
     return ((_ayahs!.length - 1) ~/ _ayahsPerPage) + 1;
   }
@@ -118,12 +147,8 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     super.dispose();
   }
 
-  void _toggleBars() {
-    setState(() => _showBars = !_showBars);
-  }
-
   void _saveBookmark() {
-    widget.settings.setBookmark(widget.surah.number, _currentPage);
+    widget.settings.setBookmark(_currentSurah.number, _currentPage);
     setState(() => _bookmarked = true);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -137,19 +162,17 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   @override
   Widget build(BuildContext context) {
     final dark = widget.settings.darkMode;
-    final bgColor = dark ? const Color(0xFF1A1A2E) : const Color(0xFFFAF7F0);
+    final bgColor = dark ? const Color(0xFF1A1A2E) : const Color(0xFFFDF8F0);
 
     return Scaffold(
       backgroundColor: bgColor,
       body: GestureDetector(
-        onTap: _toggleBars,
+        onTap: () => setState(() => _showBars = !_showBars),
         child: Stack(
           children: [
-            // محتوى القرآن
             Column(
               children: [
-                // مساحة بدل الهيدر
-                SizedBox(height: MediaQuery.of(context).padding.top + (_showBars ? 70 : 0)),
+                SizedBox(height: MediaQuery.of(context).padding.top + (_showBars ? 68 : 8)),
                 if (_loading)
                   const Expanded(child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
                 else if (_error != null)
@@ -169,13 +192,12 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
                     ],
                   )))
                 else
-                  Expanded(child: _buildReader(bgColor)),
-                // Footer ثابت دائماً
+                  Expanded(child: _buildReader(bgColor, dark)),
                 if (!_loading && _error == null) _buildFooter(dark),
               ],
             ),
 
-            // شريط علوي يظهر عند الضغط
+            // شريط علوي
             if (_showBars)
               Positioned(
                 top: 0, left: 0, right: 0,
@@ -191,7 +213,6 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
                             icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
                             onPressed: () => Navigator.pop(context),
                           ),
-                          // زر الفهرس
                           GestureDetector(
                             onTap: () => Navigator.pop(context),
                             child: Container(
@@ -200,9 +221,9 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
                                 color: Colors.white.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Row(
+                              child: const Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
+                                children: [
                                   Icon(Icons.menu, color: Colors.white, size: 16),
                                   SizedBox(width: 4),
                                   Text('الفهرس', style: TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Tajawal')),
@@ -211,24 +232,14 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
                             ),
                           ),
                           const Spacer(),
-                          // اسم السورة في المنتصف
-                          Text(widget.surah.nameAr,
+                          Text(_currentSurah.nameAr,
                             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
                           const Spacer(),
-                          // علامة القراءة
                           GestureDetector(
                             onTap: _saveBookmark,
                             child: Icon(
                               _bookmarked ? Icons.bookmark : Icons.bookmark_border,
-                              color: _bookmarked ? AppColors.gold : Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // الإعدادات
-                          GestureDetector(
-                            onTap: () {},
-                            child: const Icon(Icons.settings_rounded, color: Colors.white, size: 20),
+                              color: _bookmarked ? AppColors.gold : Colors.white, size: 22),
                           ),
                         ],
                       ),
@@ -242,136 +253,204 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     );
   }
 
-  Widget _buildReader(Color bgColor) {
+  Widget _buildReader(Color bgColor, bool dark) {
     return PageView.builder(
       controller: _pageCtrl,
-      reverse: true, // تمرير من اليمين لليسار (عربي)
+      reverse: true,
       onPageChanged: (p) {
         HapticFeedback.selectionClick();
         setState(() => _currentPage = p);
-        widget.settings.saveLastPosition(widget.surah.number, p);
+        widget.settings.saveLastPosition(_currentSurah.number, p);
       },
       itemCount: _totalPages,
       itemBuilder: (ctx, pageIndex) {
-        final start = pageIndex * _ayahsPerPage;
-        final end = (start + _ayahsPerPage).clamp(0, _ayahs!.length);
-        final pageAyahs = _ayahs!.sublist(start, end);
-        return _buildPage(pageAyahs, pageIndex, bgColor);
+        // هل الصفحة من السورة الحالية أم التالية؟
+        if (pageIndex < _currentSurahPages) {
+          final start = pageIndex * _ayahsPerPage;
+          final end = (start + _ayahsPerPage).clamp(0, _ayahs!.length);
+          return _buildPage(_ayahs!.sublist(start, end), pageIndex, _currentSurah, bgColor, dark);
+        } else {
+          // صفحات السورة التالية
+          final nextPageIndex = pageIndex - _currentSurahPages;
+          final start = nextPageIndex * _ayahsPerPage;
+          final end = (start + _ayahsPerPage).clamp(0, _nextAyahs!.length);
+          final nextSurah = kSurahs[_currentSurah.number]; // السورة التالية
+          return _buildPage(_nextAyahs!.sublist(start, end), nextPageIndex, nextSurah, bgColor, dark);
+        }
       },
     );
   }
 
-  Widget _buildPage(List<Ayah> ayahs, int pageIndex, Color bgColor) {
-    final dark = widget.settings.darkMode;
-    final textColor = dark ? const Color(0xFFE8E0D0) : const Color(0xFF1A2A3A);
-    final hasBismillah = widget.surah.number != 1 && widget.surah.number != 9 && pageIndex == 0;
+  Widget _buildPage(List<Ayah> ayahs, int pageIndex, Surah surah, Color bgColor, bool dark) {
+    final textColor = dark ? const Color(0xFFEDE4D0) : const Color(0xFF1C1C1C);
+    final borderColor = dark ? Colors.white.withOpacity(0.08) : const Color(0xFFD4C5A9);
+    final hasBismillah = surah.number != 1 && surah.number != 9 && pageIndex == 0;
     final fontSize = widget.settings.fontSize;
 
     return GestureDetector(
-      onTap: _toggleBars,
+      onTap: () => setState(() => _showBars = !_showBars),
       child: Container(
         color: bgColor,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-          child: Column(
-            children: [
-              // رأس السورة (صفحة أولى فقط)
-              if (pageIndex == 0) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    gradient: AppColors.gradient,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 12, offset: const Offset(0,4))],
-                  ),
-                  child: Column(
-                    children: [
-                      Text(widget.surah.nameAr,
-                        style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
-                      Text(widget.surah.nameEn,
-                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, fontFamily: 'Tajawal')),
-                    ],
-                  ),
+        child: Column(
+          children: [
+            // إطار المصحف
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                decoration: BoxDecoration(
+                  color: dark ? const Color(0xFF1E1E2E) : const Color(0xFFFFFDF7),
+                  border: Border.all(color: borderColor, width: 1),
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 8, offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-              ],
+                child: Column(
+                  children: [
+                    // رأس السورة
+                    if (pageIndex == 0) _buildSurahHeader(surah, borderColor),
 
-              // بسملة
-              if (hasBismillah) ...[
-                Text('بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Hafs', fontSize: fontSize + 2,
-                    color: AppColors.primary, height: 2.2,
-                  )),
-                Container(height: 1, color: AppColors.primary.withOpacity(0.1),
-                  margin: const EdgeInsets.symmetric(vertical: 12)),
-              ],
+                    // بسملة
+                    if (hasBismillah) _buildBismillah(fontSize, borderColor),
 
-              // نص القرآن
-              RichText(
-                textAlign: TextAlign.justify,
-                textDirection: TextDirection.rtl,
-                text: TextSpan(
-                  children: ayahs.map((a) => [
-                    TextSpan(
-                      text: a.text,
-                      style: TextStyle(
-                        fontFamily: 'Hafs', fontSize: fontSize,
-                        color: textColor, height: 2.4,
+                    // نص القرآن
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        child: RichText(
+                          textAlign: TextAlign.justify,
+                          textDirection: TextDirection.rtl,
+                          text: TextSpan(
+                            children: ayahs.map((a) => [
+                              TextSpan(
+                                text: a.text,
+                                style: TextStyle(
+                                  fontFamily: 'Hafs',
+                                  fontSize: fontSize,
+                                  color: textColor,
+                                  height: 2.6,
+                                ),
+                              ),
+                              WidgetSpan(
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                                  child: Text(
+                                    ' \u06DD${_toArabicNum(a.numberInSurah)} ',
+                                    style: TextStyle(
+                                      fontFamily: 'Tajawal',
+                                      fontSize: fontSize * 0.7,
+                                      color: dark
+                                        ? AppColors.gold.withOpacity(0.8)
+                                        : const Color(0xFF8B4513),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ]).expand((x) => x).toList(),
+                          ),
+                        ),
                       ),
                     ),
-                    TextSpan(
-                      text: ' ${_getEndMark(a.numberInSurah)} ',
-                      style: TextStyle(
-                        fontFamily: 'Tajawal', fontSize: fontSize * 0.8,
-                        color: AppColors.gold, fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ]).expand((x) => x).toList(),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSurahHeader(Surah surah, Color borderColor) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        gradient: AppColors.gradient,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(3),
+          topRight: Radius.circular(3),
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(surah.nameAr,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              fontFamily: 'Tajawal',
+            )),
+          const SizedBox(height: 2),
+          Text('${surah.type}  •  ${_toArabicNum(surah.ayahCount)} آية',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 11,
+              fontFamily: 'Tajawal',
+            )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBismillah(double fontSize, Color borderColor) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: borderColor, width: 1)),
+      ),
+      child: Text(
+        'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'Hafs',
+          fontSize: fontSize + 1,
+          color: AppColors.primary,
+          height: 1.8,
         ),
       ),
     );
   }
 
   Widget _buildFooter(bool dark) {
-    final footerBg = dark ? const Color(0xFF16213E) : AppColors.card;
+    final footerBg = dark ? const Color(0xFF16213E) : const Color(0xFFF5EDD8);
+    final textColor = dark ? Colors.white : AppColors.primary;
+
     return Container(
       color: footerBg,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // السهم الأيسر = الصفحة التالية (reverse=true)
           GestureDetector(
             onTap: _currentPage < _totalPages - 1
               ? () => _pageCtrl.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut)
               : null,
             child: Icon(Icons.arrow_back_ios_rounded,
               color: _currentPage < _totalPages - 1 ? AppColors.primary : AppColors.muted.withOpacity(0.3),
-              size: 20),
+              size: 18),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('${_toArabicNum(_currentPage + 1)} / ${_toArabicNum(_totalPages)}',
-                style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal')),
-              const Text('صفحة', style: TextStyle(color: AppColors.muted, fontSize: 10, fontFamily: 'Tajawal')),
-            ],
+          Text(
+            '${_toArabicNum(_currentPage + 1)} / ${_toArabicNum(_totalPages)}',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Tajawal',
+            ),
           ),
-          // السهم الأيمن = الصفحة السابقة (reverse=true)
           GestureDetector(
             onTap: _currentPage > 0
               ? () => _pageCtrl.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut)
               : null,
             child: Icon(Icons.arrow_forward_ios_rounded,
               color: _currentPage > 0 ? AppColors.primary : AppColors.muted.withOpacity(0.3),
-              size: 20),
+              size: 18),
           ),
         ],
       ),

@@ -16,6 +16,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _currentIndex = 0;
   late AnimationController _splashController;
+  late AnimationController _pulseController;
   bool _showSplash = true;
   final _settings = SettingsProvider();
 
@@ -25,9 +26,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _settings.load().then((_) => setState(() {}));
     _splashController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 800),
     );
-    Future.delayed(const Duration(milliseconds: 2600), () {
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+
+    Future.delayed(const Duration(milliseconds: 2800), () {
       if (mounted) {
         _splashController.forward().then((_) {
           if (mounted) setState(() => _showSplash = false);
@@ -39,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _splashController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -72,68 +79,96 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A2A4A), Color(0xFF243B6E), Color(0xFF1A2A4A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1B2A4A), Color(0xFF1E3560), Color(0xFF152238)],
           ),
         ),
         child: Stack(
           children: [
+            // نجوم خلفية
             Positioned.fill(child: CustomPaint(painter: _StarsPainter())),
+            // محتوى
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 110, height: 110,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(colors: [
-                        AppColors.gold.withOpacity(0.25),
-                        Colors.transparent,
-                      ]),
-                      border: Border.all(color: AppColors.gold, width: 2),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 80, height: 80,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color(0xFF2A3F6E),
+                  // أيقونة التطبيق بدون هلال
+                  AnimatedBuilder(
+                    animation: _pulseController,
+                    builder: (_, __) => Container(
+                      width: 120, height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.gold.withOpacity(0.5 + _pulseController.value * 0.5),
+                          width: 2,
                         ),
-                        child: Center(
-                          child: Text('☽',
-                            style: TextStyle(fontSize: 38, color: AppColors.gold)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.gold.withOpacity(0.1 + _pulseController.value * 0.15),
+                            blurRadius: 20 + _pulseController.value * 10,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/app_icon.png',
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  const Text('القرآن الكريم',
-                    style: TextStyle(
-                      color: Colors.white, fontSize: 34,
-                      fontWeight: FontWeight.w900, fontFamily: 'Tajawal')),
-                  const SizedBox(height: 10),
-                  Text('مصحف  •  أذكار  •  دعاء  •  تسبيح',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.65),
-                      fontSize: 14, fontFamily: 'Tajawal')),
-                  const SizedBox(height: 28),
-                  const Text('﴿وَيُسَارِعُونَ فِي الْخَيْرَاتِ﴾',
-                    style: TextStyle(
-                      color: AppColors.gold, fontSize: 16, fontFamily: 'Hafs')),
                   const SizedBox(height: 32),
+                  // اسم التطبيق بدون underline
+                  const Text(
+                    'القرآن الكريم',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      fontFamily: 'Tajawal',
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'مصحف  •  أذكار  •  دعاء  •  تسبيح',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 14,
+                      fontFamily: 'Tajawal',
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  // الآية بدون قوسين مقلوبين
+                  Text(
+                    'وَيُسَارِعُونَ فِي الْخَيْرَاتِ',
+                    textDirection: TextDirection.rtl,
+                    style: TextStyle(
+                      color: AppColors.gold.withOpacity(0.9),
+                      fontSize: 16,
+                      fontFamily: 'Hafs',
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  const SizedBox(height: 36),
+                  // نقاط تحميل
                   Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: List.generate(3, (i) => AnimatedContainer(
-                      duration: Duration(milliseconds: 400 + i * 200),
-                      width: i == 1 ? 22 : 8, height: 4,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: i == 1
-                          ? AppColors.gold
-                          : Colors.white.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(4),
+                    children: List.generate(3, (i) => AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (_, __) => Container(
+                        width: i == 1 ? 24 : 8, height: 4,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: i == 1
+                            ? AppColors.gold.withOpacity(0.7 + _pulseController.value * 0.3)
+                            : Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     )),
                   ),
@@ -203,15 +238,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 class _StarsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withOpacity(0.5);
+    final paint = Paint()..color = Colors.white.withOpacity(0.45);
     final stars = [
-      [0.1,0.08],[0.9,0.12],[0.3,0.04],[0.7,0.07],[0.5,0.15],
-      [0.15,0.25],[0.85,0.2],[0.05,0.45],[0.95,0.4],[0.4,0.02],
-      [0.6,0.17],[0.2,0.2],[0.8,0.32],[0.45,0.27],[0.75,0.05],
-      [0.55,0.35],[0.25,0.38],[0.65,0.42],[0.35,0.48],[0.88,0.5],
+      [0.08,0.06],[0.92,0.10],[0.25,0.03],[0.72,0.07],[0.48,0.14],
+      [0.14,0.22],[0.87,0.18],[0.04,0.42],[0.96,0.38],[0.38,0.02],
+      [0.62,0.16],[0.19,0.19],[0.82,0.30],[0.44,0.25],[0.77,0.04],
+      [0.55,0.33],[0.22,0.36],[0.68,0.40],[0.33,0.46],[0.90,0.48],
+      [0.12,0.55],[0.58,0.08],[0.42,0.58],[0.78,0.55],[0.02,0.65],
     ];
     for (final s in stars) {
-      canvas.drawCircle(Offset(size.width*s[0], size.height*s[1]), 1.5, paint);
+      final r = s[0] < 0.3 || s[0] > 0.7 ? 1.2 : 1.0;
+      canvas.drawCircle(Offset(size.width*s[0], size.height*s[1]), r, paint);
     }
   }
   @override
