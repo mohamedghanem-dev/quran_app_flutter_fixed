@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math' as math;
 import '../widgets/app_colors.dart';
 
-const _presets = [
+const List<Map<String, dynamic>> _presets = [
   {'name': 'سبحان الله',          'target': 33},
   {'name': 'الحمد لله',           'target': 33},
   {'name': 'الله أكبر',           'target': 34},
   {'name': 'لا إله إلا الله',    'target': 100},
   {'name': 'الاستغفار',           'target': 100},
   {'name': 'الصلاة على النبي ﷺ', 'target': 100},
+  {'name': 'لا حول ولا قوة',     'target': 33},
+  {'name': 'سبحان الله العظيم',   'target': 100},
 ];
 
 class TasbihScreen extends StatefulWidget {
@@ -18,23 +21,30 @@ class TasbihScreen extends StatefulWidget {
   State<TasbihScreen> createState() => _TasbihScreenState();
 }
 
-class _TasbihScreenState extends State<TasbihScreen> with SingleTickerProviderStateMixin {
+class _TasbihScreenState extends State<TasbihScreen>
+    with SingleTickerProviderStateMixin {
   int _count = 0;
   int _rounds = 0;
   int _total = 0;
   int _savedTotal = 0;
-  int _selectedPreset = 0;
-  int get _target => _presets[_selectedPreset]['target'] as int;
-  String get _name => _presets[_selectedPreset]['name'] as String;
+  int _selectedPreset = 0; // -1 = مخصص
+  String _customName = '';
+  int _customTarget = 33;
+  bool _isCustom = false;
 
-  late AnimationController _pulseCtrl;
-  late Animation<double> _pulseAnim;
+  late AnimationController _rippleCtrl;
+  late Animation<double> _rippleAnim;
+
+  int get _target => _isCustom ? _customTarget : _presets[_selectedPreset]['target'] as int;
+  String get _name => _isCustom ? _customName : _presets[_selectedPreset]['name'] as String;
 
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.04).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _rippleCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _rippleAnim = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut),
+    );
     _loadSaved();
   }
 
@@ -43,7 +53,7 @@ class _TasbihScreenState extends State<TasbihScreen> with SingleTickerProviderSt
     setState(() => _savedTotal = prefs.getInt('tasbih_total') ?? 0);
   }
 
-  Future<void> _saveTasbih(int add) async {
+  Future<void> _saveTotal(int add) async {
     final prefs = await SharedPreferences.getInstance();
     final newTotal = _savedTotal + add;
     await prefs.setInt('tasbih_total', newTotal);
@@ -52,221 +62,264 @@ class _TasbihScreenState extends State<TasbihScreen> with SingleTickerProviderSt
 
   void _tap() {
     HapticFeedback.lightImpact();
-    _count++;
-    _total++;
-    if (_count >= _target) {
-      _rounds++;
-      _count = 0;
-      HapticFeedback.mediumImpact();
-      _saveTasbih(_target);
-      _showRoundSnack();
-      _pulseCtrl.reset();
-      _pulseCtrl.repeat(reverse: true);
-    }
-    setState(() {});
+    _rippleCtrl.forward(from: 0);
+    setState(() {
+      _count++;
+      _total++;
+      if (_count >= _target) {
+        _rounds++;
+        _count = 0;
+        HapticFeedback.heavyImpact();
+        _saveTotal(_target);
+        _showRoundDialog();
+      }
+    });
   }
 
-  void _showRoundSnack() {
+  void _showRoundDialog() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('أحسنت! جولة $_rounds ✓', style: const TextStyle(fontFamily: 'Tajawal', fontSize: 14)),
-        duration: const Duration(seconds: 1),
-        backgroundColor: AppColors.primary,
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text('أحسنت! اكتملت الجولة $_rounds 🎉',
+              style: const TextStyle(fontFamily: 'Tajawal', fontSize: 14)),
+          ],
+        ),
+        duration: const Duration(seconds: 2),
+        backgroundColor: const Color(0xFF2E7D32),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(12),
       ),
     );
   }
 
   void _reset() {
-    HapticFeedback.selectionClick();
-    setState(() { _count = 0; _rounds = 0; _total = 0; });
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('إعادة تعيين', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.w700)),
+        content: const Text('هل تريد إعادة تعيين العداد؟', style: TextStyle(fontFamily: 'Tajawal')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Tajawal', color: AppColors.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () {
+              Navigator.pop(context);
+              HapticFeedback.selectionClick();
+              setState(() { _count = 0; _rounds = 0; _total = 0; });
+            },
+            child: const Text('تأكيد', style: TextStyle(fontFamily: 'Tajawal', color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddCustomDialog() {
+    final nameCtrl = TextEditingController();
+    final targetCtrl = TextEditingController(text: '33');
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('إضافة ذكر خاص', style: TextStyle(fontFamily: 'Tajawal', fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              textDirection: TextDirection.rtl,
+              decoration: const InputDecoration(
+                labelText: 'نص الذكر',
+                labelStyle: TextStyle(fontFamily: 'Tajawal'),
+                border: OutlineInputBorder(),
+              ),
+              style: const TextStyle(fontFamily: 'Tajawal'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: targetCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'العدد المطلوب',
+                labelStyle: TextStyle(fontFamily: 'Tajawal'),
+                border: OutlineInputBorder(),
+              ),
+              style: const TextStyle(fontFamily: 'Tajawal'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Tajawal', color: AppColors.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () {
+              if (nameCtrl.text.trim().isEmpty) return;
+              Navigator.pop(context);
+              setState(() {
+                _isCustom = true;
+                _customName = nameCtrl.text.trim();
+                _customTarget = int.tryParse(targetCtrl.text) ?? 33;
+                _count = 0;
+                _rounds = 0;
+                _total = 0;
+              });
+            },
+            child: const Text('حفظ', style: TextStyle(fontFamily: 'Tajawal', color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
+    _rippleCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final progress = _target > 0 ? _count / _target : 0.0;
+    final progress = _target > 0 ? (_count / _target).clamp(0.0, 1.0) : 0.0;
+    final size = MediaQuery.of(context).size;
+    final circleSize = size.width * 0.52;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: const Color(0xFF0D2137),
       body: Column(
         children: [
           _buildHeader(),
+          // أزرار الأذكار
+          _buildPresetChips(),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 16),
-                  Text(_name, textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.txt, fontFamily: 'Tajawal')),
-                  const SizedBox(height: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // اسم الذكر
+                Text(_name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Tajawal',
+                  )),
 
-                  // Main circle button
-                  ScaleTransition(
-                    scale: _count == 0 ? _pulseAnim : const AlwaysStoppedAnimation(1.0),
-                    child: GestureDetector(
-                      onTap: _tap,
+                // الدائرة الرئيسية
+                GestureDetector(
+                  onTap: _tap,
+                  child: AnimatedBuilder(
+                    animation: _rippleAnim,
+                    builder: (_, child) => Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // ripple
+                        if (_rippleCtrl.isAnimating)
+                          Container(
+                            width: circleSize + _rippleAnim.value * 40,
+                            height: circleSize + _rippleAnim.value * 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.gold.withOpacity(1 - _rippleAnim.value),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        child!,
+                      ],
+                    ),
+                    child: CustomPaint(
+                      painter: _CircleProgressPainter(progress: progress),
                       child: Container(
-                        width: 200, height: 200,
+                        width: circleSize,
+                        height: circleSize,
                         decoration: BoxDecoration(
-                          gradient: AppColors.gradient,
                           shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.35), blurRadius: 28, spreadRadius: 4, offset: const Offset(0,8))],
+                          gradient: RadialGradient(
+                            colors: [
+                              const Color(0xFF1E3A5F),
+                              const Color(0xFF0D2137),
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.gold.withOpacity(0.2),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(_toArabicNum(_count),
-                              style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w900, fontFamily: 'Tajawal')),
-                            Text('اضغط للتسبيح',
-                              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12, fontFamily: 'Tajawal')),
+                              style: TextStyle(
+                                color: AppColors.gold,
+                                fontSize: circleSize * 0.28,
+                                fontWeight: FontWeight.w900,
+                                fontFamily: 'Tajawal',
+                              )),
+                            Text('/ ${_toArabicNum(_target)}',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.5),
+                                fontSize: 14,
+                                fontFamily: 'Tajawal',
+                              )),
                           ],
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                ),
 
-                  // Progress bar
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: AppColors.primary.withOpacity(0.12),
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.gold),
-                      minHeight: 6,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                // إحصائيات
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _statBox('الجولات', _toArabicNum(_rounds)),
+                    _statBox('المجموع', _toArabicNum(_total)),
+                    _statBox('الإجمالي', _toArabicNum(_savedTotal)),
+                  ],
+                ),
 
-                  // Stats row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _stat('الجولات', _toArabicNum(_rounds)),
-                      Container(width: 1, height: 30, color: AppColors.primary.withOpacity(0.2), margin: const EdgeInsets.symmetric(horizontal: 20)),
-                      _stat('المجموع', _toArabicNum(_total)),
-                      Container(width: 1, height: 30, color: AppColors.primary.withOpacity(0.2), margin: const EdgeInsets.symmetric(horizontal: 20)),
-                      _stat('الهدف', _toArabicNum(_target)),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Saved total
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.06), blurRadius: 8, offset: const Offset(0,2))],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_toArabicNum(_savedTotal),
-                          style: const TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
-                        const Text('إجمالي محفوظ',
-                          style: TextStyle(color: AppColors.muted, fontSize: 12, fontFamily: 'Tajawal')),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Controls
-                  Row(
+                // أزرار التحكم
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
                     children: [
                       Expanded(
-                        child: GestureDetector(
-                          onTap: _reset,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(11),
-                            ),
-                            child: const Center(child: Text('إعادة تعيين',
-                              style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal'))),
-                          ),
+                        child: _actionBtn(
+                          'إعادة تعيين',
+                          Icons.refresh_rounded,
+                          const Color(0xFF8B0000),
+                          _reset,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() {
-                              _selectedPreset = (_selectedPreset + 1) % _presets.length;
-                              _count = 0;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            decoration: BoxDecoration(gradient: AppColors.gradient, borderRadius: BorderRadius.circular(11)),
-                            child: const Center(child: Text('التالي ◄',
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal'))),
-                          ),
+                        child: _actionBtn(
+                          'ذكر خاص',
+                          Icons.add_circle_outline_rounded,
+                          AppColors.primary,
+                          _showAddCustomDialog,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-
-                  // Preset grid
-                  const Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('اختر الذكر', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.txt, fontFamily: 'Tajawal')),
-                  ),
-                  const SizedBox(height: 10),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 2.2,
-                    children: List.generate(_presets.length, (i) {
-                      final selected = i == _selectedPreset;
-                      return GestureDetector(
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          setState(() { _selectedPreset = i; _count = 0; });
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            gradient: selected ? AppColors.gradient : null,
-                            color: selected ? null : AppColors.card,
-                            borderRadius: BorderRadius.circular(9),
-                            border: Border.all(
-                              color: selected ? Colors.transparent : AppColors.primary.withOpacity(0.2),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(_presets[i]['name'] as String,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: selected ? Colors.white : AppColors.primary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Tajawal',
-                              )),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
         ],
@@ -276,14 +329,27 @@ class _TasbihScreenState extends State<TasbihScreen> with SingleTickerProviderSt
 
   Widget _buildHeader() {
     return Container(
-      decoration: const BoxDecoration(gradient: AppColors.gradient),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0D2137), Color(0xFF1B3A5C)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
           child: Row(
             children: [
-              const Icon(Icons.radio_button_checked_rounded, color: AppColors.gold, size: 22),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.radio_button_checked_rounded, color: AppColors.gold, size: 20),
+              ),
               const SizedBox(width: 10),
               const Text('السبحة الإلكترونية',
                 style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
@@ -294,12 +360,121 @@ class _TasbihScreenState extends State<TasbihScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _stat(String label, String value) {
-    return Column(
-      children: [
-        Text(value, style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
-        Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 11, fontFamily: 'Tajawal')),
-      ],
+  Widget _buildPresetChips() {
+    return Container(
+      color: const Color(0xFF0D2137),
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        children: [
+          ...List.generate(_presets.length, (i) {
+            final selected = !_isCustom && i == _selectedPreset;
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _isCustom = false;
+                  _selectedPreset = i;
+                  _count = 0;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.gold : Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? AppColors.gold : Colors.white.withOpacity(0.15),
+                    width: 1,
+                  ),
+                ),
+                child: Text(_presets[i]['name'] as String,
+                  style: TextStyle(
+                    color: selected ? const Color(0xFF0D2137) : Colors.white.withOpacity(0.7),
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+                    fontFamily: 'Tajawal',
+                  )),
+              ),
+            );
+          }),
+          if (_isCustom)
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.gold,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(_customName,
+                style: const TextStyle(
+                  color: Color(0xFF0D2137),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Tajawal',
+                )),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statBox(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Column(
+        children: [
+          Text(value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              fontFamily: 'Tajawal',
+            )),
+          const SizedBox(height: 2),
+          Text(label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.45),
+              fontSize: 11,
+              fontFamily: 'Tajawal',
+            )),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionBtn(String label, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Tajawal',
+            )),
+          ],
+        ),
+      ),
     );
   }
 
@@ -307,4 +482,40 @@ class _TasbihScreenState extends State<TasbihScreen> with SingleTickerProviderSt
     const digits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
     return n.toString().split('').map((d) => int.tryParse(d) != null ? digits[int.parse(d)] : d).join();
   }
+}
+
+class _CircleProgressPainter extends CustomPainter {
+  final double progress;
+  const _CircleProgressPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 4;
+
+    // خلفية
+    canvas.drawCircle(center, radius,
+      Paint()
+        ..color = Colors.white.withOpacity(0.05)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6);
+
+    // تقدم
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        2 * math.pi * progress,
+        false,
+        Paint()
+          ..color = AppColors.gold
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CircleProgressPainter old) => old.progress != progress;
 }

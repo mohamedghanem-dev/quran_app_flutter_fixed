@@ -10,6 +10,28 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _settings = SettingsProvider();
+  bool _morningReminder = false;
+  bool _eveningReminder = false;
+  TimeOfDay _morningTime = const TimeOfDay(hour: 6, minute: 0);
+  TimeOfDay _eveningTime = const TimeOfDay(hour: 17, minute: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReminders();
+  }
+
+  Future<void> _loadReminders() async {
+    final prefs = await _settings.load().then((_) async {
+      final p = await _getPrefs();
+      return p;
+    });
+  }
+
+  Future<dynamic> _getPrefs() async {
+    final p = await _settings.load();
+    return p;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _switchTile(
                     icon: Icons.dark_mode_rounded,
                     title: 'الوضع الداكن',
-                    subtitle: 'تغيير مظهر التطبيق للداكن',
+                    subtitle: 'تغيير مظهر التطبيق',
                     value: _settings.darkMode,
                     textColor: textColor,
                     onChanged: (v) async {
@@ -48,15 +70,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        Text(
-                          'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+                        Text('بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
                           style: TextStyle(
                             fontFamily: 'Hafs',
                             fontSize: _settings.fontSize,
                             color: AppColors.primary,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
+                          textAlign: TextAlign.center),
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -64,9 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Expanded(
                               child: Slider(
                                 value: _settings.fontSize,
-                                min: 16,
-                                max: 36,
-                                divisions: 10,
+                                min: 16, max: 36, divisions: 10,
                                 activeColor: AppColors.primary,
                                 onChanged: (v) async {
                                   await _settings.setFontSize(v);
@@ -82,12 +100,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ]),
                 const SizedBox(height: 16),
+                _sectionTitle('التذكيرات', textColor),
+                _buildCard(cardColor, [
+                  _switchTile(
+                    icon: Icons.wb_sunny_rounded,
+                    title: 'تذكير أذكار الصباح',
+                    subtitle: _morningReminder
+                      ? 'في ${_morningTime.format(context)}'
+                      : 'معطل',
+                    value: _morningReminder,
+                    textColor: textColor,
+                    onChanged: (v) async {
+                      setState(() => _morningReminder = v);
+                      if (v) {
+                        final t = await showTimePicker(
+                          context: context,
+                          initialTime: _morningTime,
+                        );
+                        if (t != null) setState(() => _morningTime = t);
+                      }
+                    },
+                  ),
+                  _divider(),
+                  _switchTile(
+                    icon: Icons.nights_stay_rounded,
+                    title: 'تذكير أذكار المساء',
+                    subtitle: _eveningReminder
+                      ? 'في ${_eveningTime.format(context)}'
+                      : 'معطل',
+                    value: _eveningReminder,
+                    textColor: textColor,
+                    onChanged: (v) async {
+                      setState(() => _eveningReminder = v);
+                      if (v) {
+                        final t = await showTimePicker(
+                          context: context,
+                          initialTime: _eveningTime,
+                        );
+                        if (t != null) setState(() => _eveningTime = t);
+                      }
+                    },
+                  ),
+                ]),
+                const SizedBox(height: 16),
                 _sectionTitle('عن التطبيق', textColor),
                 _buildCard(cardColor, [
-                  _infoTile(Icons.info_outline_rounded, 'الإصدار', '1.0.0', textColor),
+                  _infoTile(Icons.info_outline_rounded, 'الإصدار', '1.1.0', textColor),
                   _divider(),
                   _infoTile(Icons.book_rounded, 'المصدر', 'API القرآن الكريم', textColor),
+                  _divider(),
+                  _infoTile(Icons.privacy_tip_outlined, 'سياسة الخصوصية', 'مشاهدة', textColor),
                 ]),
+                const SizedBox(height: 24),
+                // حقوق النشر
+                Center(
+                  child: Text(
+                    '© 2025 القرآن الكريم\nجميع الحقوق محفوظة',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: textColor.withOpacity(0.35),
+                      fontFamily: 'Tajawal',
+                      height: 1.6,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -128,8 +205,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _sectionTitle(String title, Color textColor) => Padding(
     padding: const EdgeInsets.only(bottom: 8, right: 4),
-    child: Text(title,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textColor.withOpacity(0.5), fontFamily: 'Tajawal')),
+    child: Text(title, style: TextStyle(
+      fontSize: 13, fontWeight: FontWeight.w700,
+      color: textColor.withOpacity(0.5), fontFamily: 'Tajawal')),
   );
 
   Widget _buildCard(Color color, List<Widget> children) => Container(
